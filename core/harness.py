@@ -96,6 +96,8 @@ class HarnessConfig:
     # Three-layer architecture (NEW — lazy init, opt-in)
     session_store: SessionStore | None = None  # Set to enable external Session persistence
     execution_engine: ExecutionEngine | None = None  # Set to enable Execution layer for file writes
+    # GitHub tools — let Agent access GitHub to improve code quality
+    github_tools: "GitHubTools | None" = None  # Set to enable GitHub search/reference tools
 
 
 # ---- Pipeline Phase Definition ----
@@ -312,6 +314,9 @@ class CodeForgeHarness:
             self._session_store = self.config.session_store
         if self._execution_engine is None and self.config.execution_engine is not None:
             self._execution_engine = self.config.execution_engine
+            # Attach GitHub tools to ExecutionEngine if configured
+            if self.config.github_tools is not None:
+                self._execution_engine._github_tools = self.config.github_tools
 
         # ── Session Layer: Create or Resume ───────────────────────────────────
         # Session layer is only active when session_store is configured

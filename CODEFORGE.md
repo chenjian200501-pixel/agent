@@ -277,6 +277,44 @@ result = await engine.execute(session_id="...", tool="write_file", input_data={
 # 内置工具：write_file / read_file / list_directory / run_command / delete_file / make_directory
 ```
 
+### GitHub Tools (`infrastructure/github_tools.py`)
+
+**角色**: 让 Agent 能访问 GitHub，搜索参考项目、分析开源代码、自动改进生成质量。
+
+**8 个工具**：
+
+| 工具 | 用途 | Agent 使用场景 |
+|------|------|--------------|
+| `github_search_repos` | 搜索仓库 | "找 FastAPI 认证的最佳参考项目" |
+| `github_search_code` | 搜索代码 | "找 JWT refresh token 的实现方式" |
+| `github_get_file` | 读取文件 | "分析 xxx 项目的用户模型实现" |
+| `github_get_repo_info` | 仓库概览 | "了解这个项目的活跃度和规模" |
+| `github_list_commits` | 提交历史 | "了解项目的开发节奏" |
+| `github_get_readme` | 读 README | "快速了解陌生项目的用途" |
+| `github_list_issues` | Issues 列表 | "了解项目的已知问题和社区反馈" |
+| `github_analyze_repo_structure` | 目录结构 | "了解陌生项目的代码组织方式" |
+
+**使用方式**：
+
+```python
+from infrastructure.github_tools import GitHubTools
+from codeforge import HarnessConfig
+
+# 方式A：通过 HarnessConfig 配置
+config = HarnessConfig(
+    github_tools=GitHubTools(),  # 自动读取 GITHUB_TOKEN 环境变量
+)
+
+# 方式B：附加到 ExecutionEngine
+from core.execution_engine import ExecutionEngine
+engine = ExecutionEngine()
+engine = engine.with_github_tools(GitHubTools())
+
+# Agent 在开发时会自动调用 GitHub 工具，例如：
+# "去 GitHub 搜一下 FastAPI 用户认证的最佳实践，
+#  然后参考 xxx 项目的实现方式来写我们的代码"
+```
+
 ### DiagnosticAgent (`agents/diagnostic.py`)
 
 **角色**: 在构建 Harness 之前诊断模型的真实失败模式
@@ -552,14 +590,14 @@ codeforge/
 │   ├── architect.py                # 架构设计 Brain
 │   ├── coder.py                    # 代码生成 Brain
 │   ├── diagnostic.py               # 诊断 Brain (Step 1)
-│   ├── documenter.py               # 文档生成 Brain
+│   ├── documenter.py              # 文档生成 Brain
 │   ├── evaluator.py                # 分离评估 Brain (Step 2)
 │   ├── requirement.py              # 需求分析 Brain
 │   ├── reviewer.py                 # 审查 Brain (YES/NO + 置信度)
 │   └── tester.py                   # 测试生成 Brain
 ├── core/
-│   ├── session_store.py             # 【NEW】Session 外部持久层
-│   ├── execution_engine.py          # 【NEW】Execution 稳定接口
+│   ├── session_store.py            # 【NEW】Session 外部持久层
+│   ├── execution_engine.py         # 【NEW】Execution 稳定接口 + GitHub 工具路由
 │   ├── ablation_engine.py          # 消融实验引擎 (Step 4)
 │   ├── agent.py                    # Agent 基类
 │   ├── harness.py                  # 主 Harness（Brain 编排逻辑）
@@ -571,9 +609,10 @@ codeforge/
 │   └── __init__.py               # CLI 入口
 └── infrastructure/
     ├── git_manager.py            # Git 版本管理
+    ├── github_tools.py             # 【NEW】GitHub API 工具集
     └── logging.py                 # 结构化日志
 ```
 
 ---
 
-*本文档基于 Anthropic Scaling Managed Agents 架构方法论优化 CodeForge | CodeForge v0.3.0*
+*本文档基于 Anthropic Scaling Managed Agents 架构方法论优化 CodeForge | CodeForge v0.4.0*

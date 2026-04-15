@@ -168,6 +168,98 @@ config = HarnessConfig(
 )
 ```
 
+---
+
+## 4. GitHub 工具
+
+### 启用 GitHub 工具
+
+```python
+from infrastructure.github_tools import GitHubTools
+from codeforge import HarnessConfig
+
+# 方式A：通过 HarnessConfig（推荐）
+config = HarnessConfig(
+    github_tools=GitHubTools(),  # 自动读取 GITHUB_TOKEN 环境变量
+)
+
+# 方式B：附加到 ExecutionEngine
+from core.execution_engine import ExecutionEngine
+engine = ExecutionEngine()
+engine = engine.with_github_tools(GitHubTools(token="ghp_xxx"))
+```
+
+### 可用工具一览
+
+| 工具名 | 用途 |
+|--------|------|
+| `github_search_repos` | 搜索仓库（按 stars/forks/更新时间排序） |
+| `github_search_code` | 在代码中搜索（找具体实现片段） |
+| `github_get_file` | 读取仓库文件内容（自动解码 base64） |
+| `github_get_repo_info` | 获取仓库概览（stars、forks、语言、描述） |
+| `github_list_commits` | 列出最近提交（了解开发节奏） |
+| `github_get_readme` | 获取 README 内容（快速了解项目） |
+| `github_list_issues` | 列出 Issues（了解已知问题和社区反馈） |
+| `github_analyze_repo_structure` | 分析目录结构（了解陌生项目组织方式） |
+
+### Agent 使用示例
+
+Agent 在开发时会自动调用 GitHub 工具，例如：
+
+```
+User: 开发一个用户认证模块，要支持 JWT + Refresh Token
+
+Agent 思考：
+  1. 先搜一下 GitHub 上 FastAPI + JWT 的最佳参考项目
+  → 调用 github_search_repos(query="FastAPI JWT authentication", language="python", sort="stars")
+
+  2. 分析排名第一的项目的认证实现
+  → 调用 github_get_file(owner="tiangolo", repo="fastapi", path="app/security.py")
+
+  3. 参考该实现，结合用户需求，生成代码
+```
+
+### 直接调用（不通过 Agent）
+
+```python
+from infrastructure.github_tools import GitHubTools
+
+tools = GitHubTools()  # 需要设置 GITHUB_TOKEN 环境变量
+
+# 搜索参考仓库
+result = tools.search_repos(
+    query="FastAPI authentication JWT",
+    language="python",
+    sort="stars",
+)
+print(tools.summarize_for_agent(result))
+# 输出:
+# 🔍 找到 5 个仓库:
+#   ⭐ 12,345 tiangolo/fastapi
+#      FastAPI framework, high-performance...
+#   ⭐ 3,456...
+
+# 读取文件内容
+result = tools.get_file(
+    owner="tiangolo",
+    repo="fastapi",
+    path="app/security.py",
+)
+print(tools.summarize_for_agent(result))
+# 输出:
+# 📄 app/security.py
+# SHA: abc123
+# [文件内容...]
+```
+
+### 环境变量
+
+```bash
+export GITHUB_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxx
+```
+
+GitHub Tools 会自动使用 `GITHUB_TOKEN`，未设置时也可以使用公开 API（速率限制更严格）。
+
 ### 2.2 可用工具
 
 ```python
@@ -317,17 +409,18 @@ print(f"任务完成，共 {session.event_count} 个事件")
 
 ---
 
-## 4. 配置参考
+## 5. 配置参考
 
 | 配置项 | 类型 | 默认值 | 说明 |
 |--------|------|--------|------|
 | `session_store` | `SessionStore \| None` | `None` | Session 持久化后端 |
 | `execution_engine` | `ExecutionEngine \| None` | `None` | Execution 执行引擎 |
+| `github_tools` | `GitHubTools \| None` | `None` | GitHub API 工具，让 Agent 能搜索参考项目 |
 
 **向后兼容**：
-- 两个配置都是 `None` 时 → 使用原有行为（无 Session，无 Execution 层）
+- 三个配置都是 `None` 时 → 使用原有行为（无 Session，无 Execution 层，无 GitHub 工具）
 - 任一配置了 → 自动启用对应层
 
 ---
 
-*本文档对应 CodeForge v0.3.0 — 基于 Anthropic Scaling Managed Agents 架构方法论*
+*本文档对应 CodeForge v0.4.0 — 基于 Anthropic Scaling Managed Agents 架构方法论*

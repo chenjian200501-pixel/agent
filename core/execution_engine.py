@@ -337,6 +337,16 @@ class LocalProcessExecution(ExecutionBackend):
     async def health_check(self) -> bool:
         return True
 
+    def with_github_tools(self, github_tools: "GitHubTools") -> "LocalProcessExecution":
+        """Attach GitHub tools to this execution backend.
+
+        Example:
+            backend = LocalProcessExecution()
+            backend = backend.with_github_tools(GitHubTools())
+        """
+        self._github_tools = github_tools
+        return self
+
 
 # ─── Execution Engine Facade ─────────────────────────────────────────────────
 
@@ -348,6 +358,10 @@ class ExecutionEngine:
     - Did the action succeed? (ExecutionResult)
 
     The underlying backend can be swapped at any time without changing Brain.
+
+    GitHub tools are also supported — if `github_tools` is set,
+    tools prefixed with "github_" are routed to the GitHub tools layer
+    (no sandbox needed, direct API call).
     """
 
     def __init__(
@@ -355,12 +369,14 @@ class ExecutionEngine:
         backend: ExecutionBackend | None = None,
         workspace_root: Path | str = "output",
         max_retries: int = 2,
+        github_tools: "GitHubTools | None" = None,
     ):
         self.backend = backend or LocalProcessExecution(workspace_root)
         self.workspace_root = Path(workspace_root)
         self.max_retries = max_retries
         self._current_unit_id: str | None = None
         self._retry_count: dict[str, int] = {}
+        self._github_tools = github_tools
 
     async def provision(self, context: ProvisionContext) -> str:
         """Prepare execution environment for the given task context.
@@ -405,6 +421,26 @@ class ExecutionEngine:
 
         result = await self.backend.execute(unit_id, tool, input_data)
 
+        # GitHub tools: routed to GitHub layer (no sandbox needed)
+        if result.status == ExecutionStatus.FAILED and tool.startswith("github_") and self._github_tools:
+            gh_result = self._github_tools.call_tool(tool, **input_data)
+            if gh_result.get("ok"):
+                return ExecutionResult(
+                    status=ExecutionStatus.SUCCESS,
+                    tool=tool,
+                    input_data=input_data,
+                    output=gh_result.get("data"),
+                    duration_ms=0,
+                )
+            else:
+                return ExecutionResult(
+                    status=ExecutionStatus.FAILED,
+                    tool=tool,
+                    input_data=input_data,
+                    error=gh_result.get("error", "Unknown GitHub tool error"),
+                    duration_ms=0,
+                )
+
         # Retry logic: if execution failed, re-provision and retry
         if result.status == ExecutionStatus.FAILED and current_retries < self.max_retries:
             self._retry_count[retries_key] = current_retries + 1
@@ -425,5 +461,8 @@ class ExecutionEngine:
         return await self.backend.health_check()
 
     def tools(self) -> list[Tool]:
-        """Return all tools available in the current backend."""
-        return self.backend.available_tools()
+        """Return all tools available (built-in + GitHub)."""
+        from infrastructure.github_tools import TOOLS as GITHUB_TOOLS
+        base = self.backend.available_tools()
+        github = GITHUB_TOOLS if self._github_tools else []
+        return base + github
